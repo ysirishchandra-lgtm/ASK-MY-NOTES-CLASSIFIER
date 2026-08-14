@@ -1,36 +1,82 @@
-function setSample(text) {
-    document.getElementById('questionInput').value = text;
-}
+const pdfFile = document.getElementById('pdfFile');
+const uploadStatus = document.getElementById('uploadStatus');
+const questionInput = document.getElementById('questionInput');
+const submitBtn = document.getElementById('submitBtn');
+const answerText = document.getElementById('answerText');
 
-document.getElementById('classifyForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const question = document.getElementById('questionInput').value.trim();
-    if (!question) return;
+// Determine API URL based on environment
+// For local development, it assumes Backend is running on port 8000
+// In production via Render, it might need to point to the deployed backend URL
+const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+    ? 'http://127.0.0.1:8000' 
+    : 'https://askmynotes-backend.onrender.com'; // Change this to actual backend URL in production
 
-    const btn = document.getElementById('submitBtn');
-    const resultCard = document.getElementById('resultCard');
+pdfFile.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) {
+        uploadStatus.textContent = 'No file chosen';
+        uploadStatus.style.color = 'var(--text-secondary)';
+        return;
+    }
+
+    uploadStatus.textContent = 'Uploading...';
+    uploadStatus.style.color = 'var(--text-secondary)';
     
-    btn.disabled = true;
-    btn.innerHTML = '<span>Classifying...</span>';
+    const formData = new FormData();
+    formData.append('file', file);
 
     try {
-        const response = await fetch('/api/predict', {
+        const response = await fetch(`${API_URL}/upload`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ question: question })
+            body: formData
         });
+        
         const data = await response.json();
-
-        document.getElementById('categoryText').textContent = data.predicted_category || 'Unknown';
-        document.getElementById('questionText').textContent = '"' + data.question + '"';
-        if (data.confidence) {
-            document.getElementById('confidenceText').textContent = data.confidence + ' Confidence';
+        if (response.ok) {
+            uploadStatus.textContent = 'File uploaded successfully.';
+            uploadStatus.style.color = '#10b981'; // Green for success
+        } else {
+            uploadStatus.textContent = 'Error: ' + data.error;
+            uploadStatus.style.color = '#ef4444'; // Red for error
         }
-        resultCard.style.display = 'block';
     } catch (err) {
-        alert('Error reaching prediction API: ' + err);
+        uploadStatus.textContent = 'Failed to upload.';
+        uploadStatus.style.color = '#ef4444';
+    }
+});
+
+submitBtn.addEventListener('click', async () => {
+    const question = questionInput.value.trim();
+    if (!question) return;
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Thinking...';
+    
+    answerText.textContent = 'Generating answer...';
+    answerText.className = 'placeholder-text';
+
+    try {
+        const response = await fetch(`${API_URL}/ask`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ question })
+        });
+        
+        const data = await response.json();
+        if (response.ok && data.answer) {
+            answerText.textContent = data.answer;
+            answerText.className = 'answer-text';
+        } else {
+            answerText.textContent = data.error || 'An error occurred.';
+            answerText.className = 'placeholder-text';
+        }
+    } catch (err) {
+        answerText.textContent = 'Failed to connect to the server. Make sure the backend is running.';
+        answerText.className = 'placeholder-text';
     } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<span>Classify Question</span>';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit';
     }
 });
