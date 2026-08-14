@@ -5,11 +5,7 @@ import os
 import io
 from PyPDF2 import PdfReader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
-
-from langchain_huggingface import HuggingFacePipeline
-from transformers import pipeline
 
 app = FastAPI(title="AskMyNotes RAG API")
 
@@ -27,7 +23,14 @@ load_dotenv()
 # Global variables for vector store and LLM
 vector_store = None
 llm = None
-embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+
+from langchain_huggingface import HuggingFaceEndpointEmbeddings
+
+# Initialize Hugging Face Endpoint embeddings
+embeddings = HuggingFaceEndpointEmbeddings(
+    model="sentence-transformers/all-MiniLM-L6-v2",
+    huggingfacehub_api_token=os.environ.get("HF_TOKEN")
+)
 
 # Initialize cloud LLM via HuggingFace API (Massive model, zero local processing)
 try:
