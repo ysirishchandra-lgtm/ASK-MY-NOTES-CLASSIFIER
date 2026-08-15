@@ -9,7 +9,7 @@ const answerText = document.getElementById('answerText');
 // In production via Render, it might need to point to the deployed backend URL
 const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
     ? 'http://127.0.0.1:8000' 
-    : 'https://ask-my-notes-classifier-1.onrender.com'; // Change this to actual backend URL in production
+    : 'https://askmynotes-api-latest.onrender.com'; // Change this to actual backend URL in production
 
 pdfFile.addEventListener('change', async (e) => {
     const file = e.target.files[0];
@@ -66,7 +66,10 @@ submitBtn.addEventListener('click', async () => {
         
         const data = await response.json();
         if (response.ok && data.answer) {
-            answerText.textContent = data.answer;
+            // Very simple markdown parser for bold and newlines
+            let formatted = data.answer.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+            formatted = formatted.replace(/\n/g, '<br>');
+            answerText.innerHTML = formatted;
             answerText.className = 'answer-text';
         } else {
             answerText.textContent = data.error || 'An error occurred.';

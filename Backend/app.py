@@ -12,7 +12,7 @@ app = FastAPI(title="AskMyNotes RAG API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -23,6 +23,7 @@ load_dotenv()
 # Global variables for vector store and LLM
 vector_store = None
 llm = None
+full_pdf_text = ""
 
 from langchain_huggingface import HuggingFaceEndpointEmbeddings
 
@@ -39,8 +40,8 @@ try:
     endpoint = HuggingFaceEndpoint(
         repo_id="Qwen/Qwen2.5-72B-Instruct",
         huggingfacehub_api_token=os.environ.get("HF_TOKEN"),
-        max_new_tokens=250,
-        temperature=0.1
+        max_new_tokens=2048,
+        temperature=0.3
     )
     llm = ChatHuggingFace(llm=endpoint)
     print("API Connected successfully.")
@@ -55,7 +56,7 @@ class QuestionRequest(BaseModel):
 
 @app.post("/upload")
 async def upload_pdf(file: UploadFile = File(...)):
-    global vector_store
+    global vector_store, full_pdf_text
     try:
         content = await file.read()
         pdf_reader = PdfReader(io.BytesIO(content))
@@ -66,6 +67,8 @@ async def upload_pdf(file: UploadFile = File(...)):
                 
         if not text:
             return {"error": "Could not extract text from PDF."}
+
+        full_pdf_text = text
 
         # Chunk text into smaller pieces for much faster AI processing
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=50)
@@ -80,24 +83,34 @@ async def upload_pdf(file: UploadFile = File(...)):
 
 @app.post("/ask")
 async def ask_question(data: QuestionRequest):
-    global vector_store, llm
+    global vector_store, llm, full_pdf_text
     if not vector_store:
         return {"error": "Please upload a PDF first."}
     if not llm:
         return {"error": "AI model is still loading or failed to load."}
     
     try:
-        # Retrieve a smaller, more focused context to maximize response speed
-        docs = vector_store.similarity_search(data.question, k=2)
-        context = "\n".join([doc.page_content for doc in docs])
+        question_lower = data.question.lower()
+        if "summary" in question_lower or "summarize" in question_lower:
+            # For summarization, provide the whole text (up to 20000 chars to stay within context limits safely)
+            context = full_pdf_text[:20000]
+        else:
+            # Retrieve a massive context to maximize response detail
+            docs = vector_store.similarity_search(data.question, k=10)
+            context = "\n".join([doc.page_content for doc in docs])
         
         # Generate answer using Cloud LLM
         from langchain_core.messages import HumanMessage
         prompt = (
-            f"You are a smart, helpful assistant answering questions based on notes.\n\n"
+            f"You are the world's most intelligent AI assistant. Your goal is to provide a '10/10 rating' masterclass response based ONLY on the provided notes.\n\n"
             f"Notes Context: {context}\n\n"
             f"User Question: {data.question}\n\n"
-            f"Answer clearly and concisely based on the context:"
+            f"Instructions for a 10/10 response:\n"
+            f"1. Be incredibly detailed, comprehensive, and exhaustive.\n"
+            f"2. Use markdown formatting beautifully (bolding key terms, using bullet points, creating clear paragraphs).\n"
+            f"3. Structure the answer logically with an introduction, detailed body paragraphs, and a clear conclusion.\n"
+            f"4. Leave absolutely no stone unturned.\n\n"
+            f"Generate your 10/10 response now:"
         )
         response = llm.invoke([HumanMessage(content=prompt)])
             
